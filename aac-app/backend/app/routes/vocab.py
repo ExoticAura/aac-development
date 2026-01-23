@@ -22,6 +22,13 @@ class VocabItemOut(VocabItemCreate):
     class Config:
         from_attributes = True
 
+class VocabItemUpdate(BaseModel):
+    pack_id: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1, max_length=80)
+    say: Optional[str] = Field(default=None, max_length=200)
+    icon: Optional[str] = Field(default=None, max_length=200)
+    order: int = 0
+
 @router.get("", response_model=List[VocabItemOut])
 def list_vocab(
     pack_id: Optional[str] = Query(default=None),
@@ -52,6 +59,25 @@ def get_vocab(item_id: str, db: Session = Depends(get_db)):
     item = db.get(VocabItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Vocab item not found")
+    return item
+
+@router.put("/{item_id}", response_model=VocabItemOut)
+def update_vocab(item_id: str, payload: VocabItemUpdate, db: Session = Depends(get_db)):
+    item = db.get(VocabItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Vocab item not found")
+
+    pack = db.get(Pack, payload.pack_id)
+    if not pack:
+        raise HTTPException(status_code=400, detail="pack_id does not exist")
+
+    item.pack_id = payload.pack_id
+    item.label = payload.label
+    item.say = payload.say
+    item.icon = payload.icon
+    item.order = payload.order
+    db.commit()
+    db.refresh(item)
     return item
 
 @router.delete("/{item_id}", status_code=204)

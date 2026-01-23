@@ -1,16 +1,38 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, Pressable, StyleSheet, ScrollView, Platform, TextInput, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+
 // Tile type definition
 type VocabTile = {
+  id?: string;
+  packId?: string;
+  order?: number;
   label: string;
   say: string;
   color: string;
   icon?: any;
   textColor?: string;
   imageUrl?: string;
+};
+
+type Pack = {
+  id: string;
+  name: string;
+  description?: string;
+  subject?: string;
+  grade?: string;
+};
+
+type VocabApiItem = {
+  id: string;
+  pack_id: string;
+  label: string;
+  say?: string | null;
+  icon?: string | null;
+  order?: number;
 };
 
 // Frequently used core vocabulary with Proloquo2Go color scheme
@@ -266,6 +288,79 @@ const BASE_FOLDERS = [
   { key: "help", label: "Help", icon: "medkit", color: "#FFB3B3" },
 ];
 
+async function fetchPacks(): Promise<Pack[]> {
+  const res = await fetch(`${API_URL}/packs`);
+  if (!res.ok) {
+    throw new Error("Failed to load packs");
+  }
+  return res.json();
+}
+
+async function fetchVocab(packId: string): Promise<VocabApiItem[]> {
+  const res = await fetch(`${API_URL}/vocab?pack_id=${encodeURIComponent(packId)}`);
+  if (!res.ok) {
+    throw new Error("Failed to load vocab");
+  }
+  return res.json();
+}
+
+async function createVocabItem(payload: {
+  pack_id: string;
+  label: string;
+  say?: string | null;
+  icon?: string | null;
+  order?: number;
+}): Promise<VocabApiItem> {
+  const res = await fetch(`${API_URL}/vocab`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.json();
+}
+
+async function updateVocabItem(itemId: string, payload: {
+  pack_id: string;
+  label: string;
+  say?: string | null;
+  icon?: string | null;
+  order?: number;
+}): Promise<VocabApiItem> {
+  const res = await fetch(`${API_URL}/vocab/${encodeURIComponent(itemId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.json();
+}
+
+async function deleteVocabItem(itemId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/vocab/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+}
+
+function mapApiItemToTile(item: VocabApiItem): VocabTile {
+  return {
+    id: item.id,
+    packId: item.pack_id,
+    order: item.order ?? 0,
+    label: item.label,
+    say: item.say ?? item.label,
+    color: "#FFE6B3",
+    icon: item.icon ?? undefined,
+  };
+}
+
 export default function Home() {
   const [sentence, setSentence] = useState<string[]>([]);
   const [activeFolder, setActiveFolder] = useState<string>("home");
@@ -281,6 +376,9 @@ export default function Home() {
   // State for vocabulary (so we can update it)
   const [coreVocab, setCoreVocab] = useState<VocabTile[]>(INITIAL_CORE_VOCAB);
   const [categoryVocab, setCategoryVocab] = useState<Record<string, VocabTile[]>>(INITIAL_CATEGORY_VOCAB);
+  const [packVocab, setPackVocab] = useState<Record<string, VocabTile[]>>({});
+  const [defaultPackId, setDefaultPackId] = useState<string | null>(null);
+  const [packFolders, setPackFolders] = useState<Array<{key: string, label: string, icon: string, color: string}>>([]);
   
   // Form states
   const [formLabel, setFormLabel] = useState<string>("");
@@ -308,17 +406,28 @@ export default function Home() {
   const TILES_PER_PAGE = Platform.OS === 'web' ? 18 : 15; // Web: 3 rows × 6 columns, Mobile: 5 rows × 3 columns
 
   // Combined folders list (base + custom)
-  const SUBJECT_FOLDERS = useMemo(() => [...BASE_FOLDERS, ...customFolders], [customFolders]);
+  const SUBJECT_FOLDERS = useMemo(() => [...BASE_FOLDERS, ...packFolders, ...customFolders], [customFolders, packFolders]);
 
   const sentenceText = useMemo(() => sentence.join(" "), [sentence]);
+
+  const packIds = useMemo(() => new Set(packFolders.map((folder) => folder.key)), [packFolders]);
+  const resolvePackId = (folderKey: string): string | null => {
+    if (packIds.has(folderKey)) {
+      return folderKey;
+    }
+    return null;
+  };
   
   // Get the current vocabulary to display
   const currentVocab = useMemo(() => {
     if (activeFolder === "home") {
       return coreVocab;
     }
+    if (packIds.has(activeFolder)) {
+      return packVocab[activeFolder] || [];
+    }
     return categoryVocab[activeFolder] || coreVocab;
-  }, [activeFolder, coreVocab, categoryVocab]);
+  }, [activeFolder, coreVocab, categoryVocab, packIds, packVocab]);
 
   // Paginated vocabulary
   const paginatedVocab = useMemo(() => {
@@ -335,6 +444,54 @@ export default function Home() {
     setReorderMode(false);
     setDraggedTileIndex(-1);
   }, [activeFolder]);
+
+  useEffect(() => {
+    const loadPacks = async () => {
+      try {
+        const packs = await fetchPacks();
+        const folderPacks = packs.map((pack) => ({
+          key: pack.id,
+          label: pack.name,
+          icon: "albums",
+          color: "#CCE5FF",
+        }));
+        setPackFolders(folderPacks);
+
+        const fallbackPack = packs.find((pack) => pack.id === "pack_default_help") ?? packs[0];
+        const initialPackId = fallbackPack?.id ?? null;
+        setDefaultPackId(initialPackId);
+        if (initialPackId) {
+          const items = await fetchVocab(initialPackId);
+          const tiles = items.map(mapApiItemToTile);
+          setPackVocab((prev) => ({ ...prev, [initialPackId]: tiles }));
+        }
+      } catch (error) {
+        console.log(error);
+      }
+    };
+
+    loadPacks();
+  }, []);
+
+  useEffect(() => {
+    const loadFolderVocab = async () => {
+      if (!packIds.has(activeFolder)) {
+        return;
+      }
+      if (packVocab[activeFolder]) {
+        return;
+      }
+      try {
+        const items = await fetchVocab(activeFolder);
+        const tiles = items.map(mapApiItemToTile);
+        setPackVocab((prev) => ({ ...prev, [activeFolder]: tiles }));
+      } catch (error) {
+        console.log(error);
+      }
+    };
+
+    loadFolderVocab();
+  }, [activeFolder, packIds, packVocab]);
 
   function numberToWords(num: number): string {
     if (num === 0) return "zero";
@@ -604,18 +761,38 @@ export default function Home() {
                   />
                   <Pressable
                     style={s.deleteBtn}
-                    onPress={(e) => {
+                    onPress={async (e) => {
                       e.stopPropagation();
                       // Delete the tile
-                      if (activeFolder === "home") {
-                        const newVocab = coreVocab.filter((_, i) => i !== actualIndex);
-                        setCoreVocab(newVocab);
-                      } else {
-                        const newCategoryVocab = {...categoryVocab};
-                        const folderVocab = [...(newCategoryVocab[activeFolder] || [])];
-                        folderVocab.splice(actualIndex, 1);
-                        newCategoryVocab[activeFolder] = folderVocab;
-                        setCategoryVocab(newCategoryVocab);
+                      const sourceVocab = activeFolder === "home"
+                        ? coreVocab
+                        : (packIds.has(activeFolder)
+                          ? (packVocab[activeFolder] || [])
+                          : (categoryVocab[activeFolder] || []));
+                      const tileToDelete = sourceVocab[actualIndex];
+                      if (!tileToDelete?.id) {
+                        if (activeFolder === "home") {
+                          const newVocab = coreVocab.filter((_, i) => i !== actualIndex);
+                          setCoreVocab(newVocab);
+                        } else {
+                          const newCategoryVocab = {...categoryVocab};
+                          const folderVocab = [...(newCategoryVocab[activeFolder] || [])];
+                          folderVocab.splice(actualIndex, 1);
+                          newCategoryVocab[activeFolder] = folderVocab;
+                          setCategoryVocab(newCategoryVocab);
+                        }
+                        return;
+                      }
+                      try {
+                        await deleteVocabItem(tileToDelete.id);
+                        const packId = tileToDelete.packId ?? resolvePackId(activeFolder);
+                        if (packId) {
+                          const items = await fetchVocab(packId);
+                          const tiles = items.map(mapApiItemToTile);
+                          setPackVocab((prev) => ({ ...prev, [packId]: tiles }));
+                        }
+                      } catch (error) {
+                        console.log(error);
                       }
                     }}
                   >
@@ -868,7 +1045,7 @@ export default function Home() {
                 </Pressable>
                 <Pressable 
                   style={[s.modalBtn, s.modalBtnPrimary]}
-                  onPress={() => {
+                  onPress={async () => {
                     if (!editingTile || !editCategory) {
                       alert('Please select a category');
                       return;
@@ -882,42 +1059,59 @@ export default function Home() {
                       imageUrl: editImageUrl || undefined,
                     };
                     
-                    // If category changed, remove from old category and add to new
-                    if (editCategory !== activeFolder) {
-                      // Remove from current category
-                      if (activeFolder === "home") {
-                        const newVocab = coreVocab.filter((_, i) => i !== editingTileIndex);
-                        setCoreVocab(newVocab);
-                      } else {
-                        const newCategoryVocab = {...categoryVocab};
-                        const folderVocab = [...(newCategoryVocab[activeFolder] || [])];
-                        folderVocab.splice(editingTileIndex, 1);
-                        newCategoryVocab[activeFolder] = folderVocab;
-                        setCategoryVocab(newCategoryVocab);
+                    const targetPackId = resolvePackId(editCategory);
+                    if (targetPackId) {
+                      if (!editingTile.id) {
+                        return;
                       }
-                      
-                      // Add to new category
-                      if (editCategory === "home") {
-                        setCoreVocab([...coreVocab, updatedTile]);
-                      } else {
-                        const newCategoryVocab = {...categoryVocab};
-                        const targetVocab = [...(newCategoryVocab[editCategory] || [])];
-                        targetVocab.push(updatedTile);
-                        newCategoryVocab[editCategory] = targetVocab;
-                        setCategoryVocab(newCategoryVocab);
+                      try {
+                        await updateVocabItem(editingTile.id, {
+                          pack_id: targetPackId,
+                          label: updatedTile.label,
+                          say: updatedTile.say,
+                          icon: updatedTile.icon ?? null,
+                          order: updatedTile.order ?? 0,
+                        });
+                        const items = await fetchVocab(targetPackId);
+                        const tiles = items.map(mapApiItemToTile);
+                        setPackVocab((prev) => ({ ...prev, [targetPackId]: tiles }));
+                      } catch (error) {
+                        console.log(error);
                       }
                     } else {
-                      // Update in same category
-                      if (activeFolder === "home") {
-                        const newVocab = [...coreVocab];
-                        newVocab[editingTileIndex] = updatedTile;
-                        setCoreVocab(newVocab);
+                      if (editCategory !== activeFolder) {
+                        if (activeFolder === "home") {
+                          const newVocab = coreVocab.filter((_, i) => i !== editingTileIndex);
+                          setCoreVocab(newVocab);
+                        } else {
+                          const newCategoryVocab = {...categoryVocab};
+                          const folderVocab = [...(newCategoryVocab[activeFolder] || [])];
+                          folderVocab.splice(editingTileIndex, 1);
+                          newCategoryVocab[activeFolder] = folderVocab;
+                          setCategoryVocab(newCategoryVocab);
+                        }
+
+                        if (editCategory === "home") {
+                          setCoreVocab([...coreVocab, updatedTile]);
+                        } else {
+                          const newCategoryVocab = {...categoryVocab};
+                          const targetVocab = [...(newCategoryVocab[editCategory] || [])];
+                          targetVocab.push(updatedTile);
+                          newCategoryVocab[editCategory] = targetVocab;
+                          setCategoryVocab(newCategoryVocab);
+                        }
                       } else {
-                        const newCategoryVocab = {...categoryVocab};
-                        const folderVocab = [...(newCategoryVocab[activeFolder] || [])];
-                        folderVocab[editingTileIndex] = updatedTile;
-                        newCategoryVocab[activeFolder] = folderVocab;
-                        setCategoryVocab(newCategoryVocab);
+                        if (activeFolder === "home") {
+                          const newVocab = [...coreVocab];
+                          newVocab[editingTileIndex] = updatedTile;
+                          setCoreVocab(newVocab);
+                        } else {
+                          const newCategoryVocab = {...categoryVocab};
+                          const folderVocab = [...(newCategoryVocab[activeFolder] || [])];
+                          folderVocab[editingTileIndex] = updatedTile;
+                          newCategoryVocab[activeFolder] = folderVocab;
+                          setCategoryVocab(newCategoryVocab);
+                        }
                       }
                     }
                     
@@ -1120,7 +1314,7 @@ export default function Home() {
                 </Pressable>
                 <Pressable 
                   style={[s.modalBtn, s.modalBtnPrimary]}
-                  onPress={() => {
+                  onPress={async () => {
                     if (!formLabel || !formSay || !selectedCategory) {
                       alert('Please fill in Label, Says, and select a Category');
                       return;
@@ -1133,17 +1327,34 @@ export default function Home() {
                       icon: formImageUrl ? undefined : (formIcon || undefined),
                       imageUrl: formImageUrl || undefined,
                     };
-                    
-                    // Add to selected category
-                    if (selectedCategory === "home") {
-                      setCoreVocab([...coreVocab, newWord]);
+
+                    const targetPackId = resolvePackId(selectedCategory);
+                    if (targetPackId) {
+                      try {
+                        await createVocabItem({
+                          pack_id: targetPackId,
+                          label: newWord.label,
+                          say: newWord.say,
+                          icon: newWord.icon ?? null,
+                          order: 0,
+                        });
+                        const items = await fetchVocab(targetPackId);
+                        const tiles = items.map(mapApiItemToTile);
+                        setPackVocab((prev) => ({ ...prev, [targetPackId]: tiles }));
+                      } catch (error) {
+                        console.log(error);
+                      }
                     } else {
-                      const newCategoryVocab = {...categoryVocab};
-                      const folderVocab = newCategoryVocab[selectedCategory] || [];
-                      newCategoryVocab[selectedCategory] = [...folderVocab, newWord];
-                      setCategoryVocab(newCategoryVocab);
+                      if (selectedCategory === "home") {
+                        setCoreVocab([...coreVocab, newWord]);
+                      } else {
+                        const newCategoryVocab = {...categoryVocab};
+                        const folderVocab = newCategoryVocab[selectedCategory] || [];
+                        newCategoryVocab[selectedCategory] = [...folderVocab, newWord];
+                        setCategoryVocab(newCategoryVocab);
+                      }
                     }
-                    
+
                     // Close modal and reset
                     setShowAddWordModal(false);
                     setFormLabel("");
