@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from app.routes import auth, vocab, packs, user_vocab
+from app.routes import auth, vocab, packs
 
 app = FastAPI(title="AAC School App API")
 
@@ -30,3 +30,4 @@ app.include_router(user_vocab.router, prefix="/api/vocabulary", tags=["user-voca
 @app.get("/")
 def health():
     return {"status": "ok"}
+
