@@ -9,6 +9,7 @@ frontend/.turbo
 backend/.venv
 backend/__pycache__
 backend/**/*.pyc
+**/__pycache__/
 
 # misc
 .DS_Store
