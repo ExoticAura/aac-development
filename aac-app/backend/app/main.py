@@ -49,7 +49,6 @@ def seed_defaults():
                 grade="Any",
             )
             db.add(pack)
-            db.commit()
 
         # Seed vocab if none exist for this pack
         has_vocab = db.query(VocabItem).filter(VocabItem.pack_id == default_pack_id).first()
@@ -70,7 +69,9 @@ def seed_defaults():
                     order=i,
                 )
                 db.add(item)
-            db.commit()
+        
+        # Commit all changes in a single transaction
+        db.commit()
     finally:
         db.close()
 
