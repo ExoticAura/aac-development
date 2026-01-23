@@ -4,3 +4,6 @@ sqlmodel
 psycopg2-binary
 python-jose
 passlib[bcrypt]
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+
