@@ -3,9 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 from app.routes import auth, vocab, packs
-from app.db import engine
+from app.db import engine, SessionLocal
 from app.models_db import Base, Pack, VocabItem
-from sqlalchemy.orm import Session
 from uuid import uuid4
 
 app = FastAPI(title="AAC School App API")
@@ -36,45 +35,48 @@ def health():
 
 
 def seed_defaults():
-    db = Session(bind=engine)
-
-    # Create default pack if missing
-    default_pack_id = "pack_default_help"
-    pack = db.get(Pack, default_pack_id)
-    if not pack:
-        pack = Pack(
-            id=default_pack_id,
-            name="Classroom Help",
-            description="Core classroom help phrases",
-            subject="General",
-            grade="Any",
-        )
-        db.add(pack)
-        db.commit()
-
-    # Seed vocab if none exist for this pack
-    has_vocab = db.query(VocabItem).filter(VocabItem.pack_id == default_pack_id).first()
-    if not has_vocab:
-        seed_items = [
-            ("Can you repeat?", "Can you repeat?"),
-            ("I don't understand", "I don't understand."),
-            ("I need help", "I need help."),
-            ("Slower please", "Can you speak slower, please?"),
-        ]
-        for i, (label, say) in enumerate(seed_items):
-            item = VocabItem(
-                id="vocab_" + uuid4().hex[:10],
-                pack_id=default_pack_id,
-                label=label,
-                say=say,
-                icon=None,
-                order=i,
+    db = SessionLocal()
+    try:
+        # Create default pack if missing
+        default_pack_id = "pack_default_help"
+        pack = db.get(Pack, default_pack_id)
+        if not pack:
+            pack = Pack(
+                id=default_pack_id,
+                name="Classroom Help",
+                description="Core classroom help phrases",
+                subject="General",
+                grade="Any",
             )
-            db.add(item)
-        db.commit()
+            db.add(pack)
+            db.commit()
 
-    db.close()
+        # Seed vocab if none exist for this pack
+        has_vocab = db.query(VocabItem).filter(VocabItem.pack_id == default_pack_id).first()
+        if not has_vocab:
+            seed_items = [
+                ("Can you repeat?", "Can you repeat?"),
+                ("I don't understand", "I don't understand."),
+                ("I need help", "I need help."),
+                ("Slower please", "Can you speak slower, please?"),
+            ]
+            for i, (label, say) in enumerate(seed_items):
+                item = VocabItem(
+                    id="vocab_" + uuid4().hex[:10],
+                    pack_id=default_pack_id,
+                    label=label,
+                    say=say,
+                    icon=None,
+                    order=i,
+                )
+                db.add(item)
+            db.commit()
+    finally:
+        db.close()
 
-# run once on startup
-Base.metadata.create_all(bind=engine)
-seed_defaults()
+
+@app.on_event("startup")
+def startup_event():
+    # run once on startup
+    Base.metadata.create_all(bind=engine)
+    seed_defaults()
