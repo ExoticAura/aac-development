@@ -396,18 +396,23 @@ export default function Home() {
     let textToSpeak = text;
     if (/^\d+$/.test(text)) {
       const num = parseInt(text, 10);
-      if (!isNaN(num)) {
-        textToSpeak = numberToWords(num);
-      }
+      if (!isNaN(num)) textToSpeak = numberToWords(num);
     }
 
-    if (Platform.OS === "web") {
-      const u = new SpeechSynthesisUtterance(textToSpeak);
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
+    const hasWebSpeech =
+      Platform.OS === "web" &&
+      typeof globalThis !== "undefined" &&
+      "speechSynthesis" in globalThis &&
+      "SpeechSynthesisUtterance" in globalThis;
+
+    if (hasWebSpeech) {
+      const u = new (globalThis as any).SpeechSynthesisUtterance(textToSpeak);
+      (globalThis as any).speechSynthesis.cancel();
+      (globalThis as any).speechSynthesis.speak(u);
       return;
     }
 
+    // Mobile/native fallback (Expo)
     const Speech = await import("expo-speech");
     Speech.stop();
     Speech.speak(textToSpeak, { rate: 0.95 });
