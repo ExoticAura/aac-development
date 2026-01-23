@@ -1,0 +1,3 @@
+# AAC App
+
+Project scaffold.

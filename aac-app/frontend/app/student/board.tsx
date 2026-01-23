@@ -1,0 +1,347 @@
+import { useLocalSearchParams } from "expo-router";
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from "react-native";
+import { useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+
+type Tile = { label: string; say: string; icon?: keyof typeof Ionicons.glyphMap };
+type Category = { name: string; color: string; tiles: Tile[] };
+
+/** Treat these as “symbol keypad tiles” (big, centered, no label/hint) */
+const MATH_SYMBOLS = new Set(["+", "−", "-", "×", "*", "÷", "/", "=", "≠", "<", ">", "≤", "≥"]);
+const isMathSymbol = (label: string) => MATH_SYMBOLS.has(label.trim());
+
+const PACKS: Record<string, Category[]> = {
+  math: [
+    {
+      name: "Help",
+      color: "#D6F5D6",
+      tiles: [
+        { label: "Repeat step", say: "Could you show me that step again?", icon: "refresh" },
+        { label: "Slower please", say: "Can you go slower?", icon: "walk-outline" },
+        { label: "I'm stuck", say: "I'm stuck.", icon: "hand-left-outline" },
+      ],
+    },
+    {
+      name: "Operators",
+      color: "#CFE8FF",
+      tiles: [
+        { label: "+", say: "plus" },
+        { label: "−", say: "minus" },
+        { label: "×", say: "times" },
+        { label: "÷", say: "divide" },
+        { label: "=", say: "equals" },
+      ],
+    },
+    {
+      name: "Numbers",
+      color: "#FFF2CC",
+      tiles: Array.from({ length: 100 }, (_, i) => {
+        const n = i + 1;
+        return { label: String(n), say: String(n) };
+      }),
+    },
+    {
+      name: "Units",
+      color: "#E3D7FF",
+      tiles: [
+        { label: "cm", say: "centimeters" },
+        { label: "kg", say: "kilograms" },
+        { label: "L", say: "liters" },
+      ],
+    },
+  ],
+
+  english: [
+    {
+      name: "Classroom",
+      color: "#CFE8FF",
+      tiles: [
+        { label: "Can you repeat?", say: "Can you repeat?", icon: "refresh-outline" },
+        { label: "Slower please", say: "Can you speak slower please?", icon: "speedometer-outline" },
+        { label: "How to spell?", say: "How do you spell this?", icon: "text-outline" },
+      ],
+    },
+    {
+      name: "Writing",
+      color: "#FFE2B8",
+      tiles: [
+        { label: "Sentence", say: "This is my sentence.", icon: "create-outline" },
+        { label: "Paragraph", say: "This is my paragraph.", icon: "document-text-outline" },
+        { label: "I want to read", say: "I want to read.", icon: "book-outline" },
+      ],
+    },
+    {
+      name: "Teacher said…",
+      color: "#E3D7FF",
+      tiles: [
+        { label: "Teacher said…", say: "Teacher said", icon: "person-outline" },
+        { label: "My idea is…", say: "My idea is", icon: "bulb-outline" },
+      ],
+    },
+  ],
+
+  help: [
+    {
+      name: "General",
+      color: "#FFC7C7",
+      tiles: [
+        { label: "I need help", say: "I need help.", icon: "help-circle-outline" },
+        { label: "Toilet", say: "I need the toilet.", icon: "water-outline" },
+        { label: "Drink", say: "I need a drink.", icon: "cafe-outline" },
+      ],
+    },
+  ],
+};
+
+export default function Board() {
+  const params = useLocalSearchParams();
+  const subject = (params.subject as string) || "english";
+  const categories: Category[] = PACKS[subject] ?? PACKS.english;
+
+  const [active, setActive] = useState(0);
+  const [sentence, setSentence] = useState<string[]>([]);
+  const activeCat = categories[active];
+
+  async function speakText(text: string) {
+    if (!text) return;
+
+    if (Platform.OS === "web") {
+      const u = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+      return;
+    }
+
+    const Speech = await import("expo-speech");
+    Speech.stop();
+    Speech.speak(text, { rate: 0.95 });
+  }
+
+  const sentenceText = useMemo(() => sentence.join(" "), [sentence]);
+
+    function isNumberTile(label: string) {
+        const num = Number(label);
+        return !isNaN(num) && label.trim() !== "";
+    }
+
+  return (
+    // ✅ Make the whole page scrollable
+    <ScrollView
+      style={s.page}
+      contentContainerStyle={s.pageContent}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
+      {/* header */}
+      <View style={s.topRow}>
+        <Text style={s.title}>Student AAC Board</Text>
+        <View style={s.subjectPill}>
+          <Ionicons name="school-outline" size={16} />
+          <Text style={s.subjectText}>{subject.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      {/* sentence bar */}
+      <View style={s.sentenceBox}>
+        <Text style={s.sentenceLabel}>Sentence</Text>
+        <Text style={s.sentenceValue}>{sentenceText || "Tap tiles to build a sentence"}</Text>
+
+        <View style={s.actions}>
+          <Pressable style={s.actionBtn} onPress={() => speakText(sentenceText)}>
+            <Ionicons name="volume-high-outline" size={16} />
+            <Text style={s.actionText}>Speak</Text>
+          </Pressable>
+
+          <Pressable style={s.actionBtn} onPress={() => setSentence([])}>
+            <Ionicons name="trash-outline" size={16} />
+            <Text style={s.actionText}>Clear</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* category pills (horizontal scroll ok) */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pills}>
+        {categories.map((c, i) => {
+          const isOn = i === active;
+          return (
+            <Pressable
+              key={c.name}
+              onPress={() => setActive(i)}
+              style={[s.pill, { backgroundColor: c.color, opacity: isOn ? 1 : 0.55 }]}
+            >
+              <Text style={s.pillText}>{c.name}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* tiles */}
+      <View style={s.tilesArea}>
+        <View style={[s.rowHeader, { backgroundColor: activeCat.color }]}>
+          <Text style={s.rowHeaderText}>{activeCat.name}</Text>
+        </View>
+
+        <View style={s.tilesGrid}>
+{activeCat.tiles.map((t) => {
+  const symbolMode = !t.icon && isMathSymbol(t.label);
+  const numberMode = isNumberTile(t.label);
+
+  return (
+    <Pressable
+      key={t.label}
+      style={[
+        s.tile,
+        (symbolMode || numberMode) && s.tileSymbol,
+      ]}
+      onPress={() => {
+        setSentence((prev) => [...prev, t.label]);
+        speakText(t.say);
+      }}
+    >
+      <View
+        style={[
+          s.tileIcon,
+          (symbolMode || numberMode) && s.tileIconSymbol,
+        ]}
+      >
+        {t.icon ? (
+          <Ionicons name={t.icon} size={18} />
+        ) : (
+          <Text
+            style={[
+              s.symbol,
+              (symbolMode || numberMode) && s.symbolBig,
+            ]}
+          >
+            {t.label}
+          </Text>
+        )}
+      </View>
+
+      {/* ❌ hide label + hint for numbers & symbols */}
+      {!symbolMode && !numberMode && (
+        <>
+          <Text style={s.tileLabel}>{t.label}</Text>
+          <Text style={s.tileHint}>Tap to speak + add</Text>
+        </>
+      )}
+    </Pressable>
+  );
+})}
+
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const s = StyleSheet.create({
+  // ✅ ScrollView uses style + contentContainerStyle
+  page: { flex: 1, backgroundColor: "#F7F7FB" },
+  pageContent: { padding: 16, gap: 12 },
+
+  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  title: { fontSize: 22, fontWeight: "800" },
+  subjectPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+    backgroundColor: "#fff",
+  },
+  subjectText: { fontWeight: "800", letterSpacing: 0.5 },
+
+  sentenceBox: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+    gap: 8,
+  },
+  sentenceLabel: { fontWeight: "800", color: "#222" },
+  sentenceValue: { color: "#444" },
+
+  actions: { flexDirection: "row", gap: 10, marginTop: 6, flexWrap: "wrap" },
+  actionBtn: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.10)",
+    backgroundColor: "#fff",
+  },
+  actionText: { fontWeight: "700" },
+
+  pills: { gap: 10, paddingVertical: 2 },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  pillText: { fontWeight: "800" },
+
+  // ✅ no flex:1 here (let page scroll naturally)
+  tilesArea: { gap: 10 },
+
+  rowHeader: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  rowHeaderText: { fontWeight: "900" },
+
+  tilesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tile: {
+    width: "48%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+  },
+  tileIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#F0F2F7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  symbol: { fontSize: 18, fontWeight: "900" },
+
+  tileLabel: { fontSize: 16, fontWeight: "900" },
+  tileHint: { fontSize: 12, color: "#666" },
+
+  // Symbol keypad look (big + centered)
+  tileSymbol: {
+    minHeight: 90,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tileIconSymbol: {
+    width: "100%",
+    height: 60,
+    borderRadius: 14,
+    backgroundColor: "#F0F2F7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  symbolBig: {
+    fontSize: 40,
+    fontWeight: "800",
+    lineHeight: 44,
+  },
+});
