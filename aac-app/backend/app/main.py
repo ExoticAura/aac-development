@@ -24,10 +24,10 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(vocab.router, prefix="/vocab", tags=["vocab"])
 app.include_router(packs.router, prefix="/packs", tags=["packs"])
-app.include_router(user_vocab.router, prefix="/api/vocabulary", tags=["user-vocabulary"])
 
 
 @app.get("/")
 def health():
     return {"status": "ok"}
+
 
