@@ -5,7 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "build": "node ./node_modules/expo/bin/cli export -p web --output-dir dist",
-    "start": "node ./node_modules/serve/build/main.js -s dist --single -l $PORT -H 0.0.0.0",
+    "start": "node ./node_modules/serve/build/main.js -s dist --single -l tcp://0.0.0.0:$PORT",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
