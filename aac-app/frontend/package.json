@@ -4,7 +4,7 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "build": "npx --yes expo@54.0.31 export -p web --output-dir dist",
+    "build": "node ./node_modules/expo/bin/cli export -p web --output-dir dist",
     "start": "serve -s dist --single -l $PORT -H 0.0.0.0",
     "android": "expo start --android",
     "ios": "expo start --ios",
