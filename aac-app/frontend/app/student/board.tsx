@@ -10,15 +10,74 @@ type Category = { name: string; color: string; tiles: Tile[] };
 const MATH_SYMBOLS = new Set(["+", "−", "-", "×", "*", "÷", "/", "=", "≠", "<", ">", "≤", "≥"]);
 const isMathSymbol = (label: string) => MATH_SYMBOLS.has(label.trim());
 
+function numberToWords(num: number): string {
+  const ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  const tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+  const teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+  
+  function convertHundreds(n: number): string {
+    let result = "";
+    
+    if (n >= 100) {
+      result += ones[Math.floor(n / 100)] + " hundred ";
+      n %= 100;
+    }
+    
+    if (n >= 20) {
+      result += tens[Math.floor(n / 10)];
+      if (n % 10 !== 0) result += "-" + ones[n % 10];
+    } else if (n >= 10) {
+      result += teens[n - 10];
+    } else if (n > 0) {
+      result += ones[n];
+    }
+    
+    return result.trim();
+  }
+  
+  if (num === 0) return "zero";
+  if (num < 0) return "negative " + numberToWords(-num);
+  if (num < 1000) return convertHundreds(num);
+  
+  const billions = Math.floor(num / 1000000000);
+  const millions = Math.floor((num % 1000000000) / 1000000);
+  const thousands = Math.floor((num % 1000000) / 1000);
+  const remainder = num % 1000;
+  
+  let result = "";
+  
+  if (billions > 0) {
+    result += convertHundreds(billions) + " billion ";
+  }
+  if (millions > 0) {
+    result += convertHundreds(millions) + " million ";
+  }
+  if (thousands > 0) {
+    result += convertHundreds(thousands) + " thousand ";
+  }
+  if (remainder > 0) {
+    result += convertHundreds(remainder);
+  }
+  
+  return result.trim();
+}
+
 const PACKS: Record<string, Category[]> = {
   math: [
     {
-      name: "Help",
-      color: "#D6F5D6",
+      name: "Numbers",
+      color: "#FFF2CC",
       tiles: [
-        { label: "Repeat step", say: "Could you show me that step again?", icon: "refresh" },
-        { label: "Slower please", say: "Can you go slower?", icon: "walk-outline" },
-        { label: "I'm stuck", say: "I'm stuck.", icon: "hand-left-outline" },
+        { label: "0", say: "zero" },
+        { label: "1", say: "one" },
+        { label: "2", say: "two" },
+        { label: "3", say: "three" },
+        { label: "4", say: "four" },
+        { label: "5", say: "five" },
+        { label: "6", say: "six" },
+        { label: "7", say: "seven" },
+        { label: "8", say: "eight" },
+        { label: "9", say: "nine" },
       ],
     },
     {
@@ -27,18 +86,48 @@ const PACKS: Record<string, Category[]> = {
       tiles: [
         { label: "+", say: "plus" },
         { label: "−", say: "minus" },
+        { label: "=", say: "equals" },
         { label: "×", say: "times" },
         { label: "÷", say: "divide" },
-        { label: "=", say: "equals" },
       ],
     },
     {
-      name: "Numbers",
-      color: "#FFF2CC",
-      tiles: Array.from({ length: 100 }, (_, i) => {
-        const n = i + 1;
-        return { label: String(n), say: String(n) };
-      }),
+      name: "Math Words",
+      color: "#E6FFE6",
+      tiles: [
+        { label: "add", say: "add", icon: "add-circle-outline" },
+        { label: "subtract", say: "subtract", icon: "remove-circle-outline" },
+        { label: "plus", say: "plus", icon: "add-outline" },
+        { label: "minus", say: "minus", icon: "remove-outline" },
+        { label: "equals", say: "equals", icon: "git-compare-outline" },
+        { label: "count", say: "count", icon: "list-outline" },
+        { label: "more", say: "more", icon: "arrow-up-outline" },
+        { label: "less", say: "less", icon: "arrow-down-outline" },
+        { label: "same", say: "same", icon: "repeat-outline" },
+        { label: "all", say: "all", icon: "albums-outline" },
+        { label: "none", say: "none", icon: "close-circle-outline" },
+        { label: "take away", say: "take away", icon: "trash-outline" },
+        { label: "share", say: "share", icon: "share-social-outline" },
+        { label: "group", say: "group", icon: "people-outline" },
+      ],
+    },
+    {
+      name: "Shapes",
+      color: "#FFE6F0",
+      tiles: [
+        { label: "circle", say: "circle", icon: "ellipse-outline" },
+        { label: "square", say: "square", icon: "square-outline" },
+        { label: "triangle", say: "triangle", icon: "triangle-outline" },
+      ],
+    },
+    {
+      name: "Help",
+      color: "#D6F5D6",
+      tiles: [
+        { label: "Repeat step", say: "Could you show me that step again?", icon: "refresh" },
+        { label: "Slower please", say: "Can you go slower?", icon: "walk-outline" },
+        { label: "I'm stuck", say: "I'm stuck.", icon: "hand-left-outline" },
+      ],
     },
     {
       name: "Units",
@@ -100,6 +189,7 @@ export default function Board() {
 
   const [active, setActive] = useState(0);
   const [sentence, setSentence] = useState<string[]>([]);
+  const [numberBuffer, setNumberBuffer] = useState<string>("");
   const activeCat = categories[active];
 
   async function speakText(text: string) {
@@ -152,7 +242,10 @@ export default function Board() {
             <Text style={s.actionText}>Speak</Text>
           </Pressable>
 
-          <Pressable style={s.actionBtn} onPress={() => setSentence([])}>
+          <Pressable style={s.actionBtn} onPress={() => {
+            setSentence([]);
+            setNumberBuffer("");
+          }}>
             <Ionicons name="trash-outline" size={16} />
             <Text style={s.actionText}>Clear</Text>
           </Pressable>
@@ -194,8 +287,30 @@ export default function Board() {
         (symbolMode || numberMode) && s.tileSymbol,
       ]}
       onPress={() => {
-        setSentence((prev) => [...prev, t.label]);
-        speakText(t.say);
+        if (numberMode) {
+          // Building multi-digit numbers
+          const newBuffer = numberBuffer + t.label;
+          setNumberBuffer(newBuffer);
+          const numValue = parseInt(newBuffer, 10);
+          const spokenText = numberToWords(numValue);
+          speakText(spokenText);
+          
+          // Update sentence with the current number
+          setSentence((prev) => {
+            const newSentence = [...prev];
+            if (newSentence.length > 0 && isNumberTile(newSentence[newSentence.length - 1])) {
+              newSentence[newSentence.length - 1] = newBuffer;
+            } else {
+              newSentence.push(newBuffer);
+            }
+            return newSentence;
+          });
+        } else {
+          // Reset number buffer when non-number is pressed
+          setNumberBuffer("");
+          setSentence((prev) => [...prev, t.label]);
+          speakText(t.say);
+        }
       }}
     >
       <View
