@@ -460,6 +460,9 @@ export default function Home() {
   useEffect(() => {
     const loadPacks = async () => {
       try {
+        // Initialize with base category vocab for all subject folders
+        setCategoryVocab(INITIAL_CATEGORY_VOCAB);
+        
         const packs = await fetchPacks();
         const folderPacks = packs.map((pack) => ({
           key: pack.id,
