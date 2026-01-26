@@ -1,21 +1,10 @@
 import { useLocalSearchParams } from "expo-router";
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from "react-native";
-import { useMemo, useState, useEffect } from "react";
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from "react-native";
+import { useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { getPacks, getVocabItems, type Pack, type VocabItem } from "../../services/api";
 
-type Tile = { 
-  label: string; 
-  say: string; 
-  icon?: keyof typeof Ionicons.glyphMap;
-  image_url?: string;
-};
-type Category = { 
-  name: string; 
-  color: string; 
-  tiles: Tile[];
-  image_url?: string;
-};
+type Tile = { label: string; say: string; icon?: keyof typeof Ionicons.glyphMap };
+type Category = { name: string; color: string; tiles: Tile[] };
 
 /** Treat these as “symbol keypad tiles” (big, centered, no label/hint) */
 const MATH_SYMBOLS = new Set(["+", "−", "-", "×", "*", "÷", "/", "=", "≠", "<", ">", "≤", "≥"]);
@@ -196,61 +185,7 @@ const PACKS: Record<string, Category[]> = {
 export default function Board() {
   const params = useLocalSearchParams();
   const subject = (params.subject as string) || "english";
-  
-  // State for API data
-  const [apiPacks, setApiPacks] = useState<Pack[]>([]);
-  const [apiVocabItems, setApiVocabItems] = useState<VocabItem[]>([]);
-  const [isOnline, setIsOnline] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Fetch data from API on mount
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [packs, vocabItems] = await Promise.all([
-          getPacks(),
-          getVocabItems(),
-        ]);
-        setApiPacks(packs);
-        setApiVocabItems(vocabItems);
-        setIsOnline(true);
-      } catch (error) {
-        console.warn("Failed to fetch data from API, using offline mode:", error);
-        setIsOnline(false);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
-
-  // Convert API data to Category format
-  const apiCategories: Category[] = useMemo(() => {
-    if (!isOnline || apiPacks.length === 0) return [];
-    
-    return apiPacks
-      .filter(pack => pack.subject?.toLowerCase() === subject.toLowerCase())
-      .map(pack => ({
-        name: pack.name,
-        color: pack.color || "#D6F5D6", // Default color
-        image_url: pack.image_url,
-        tiles: apiVocabItems
-          .filter(item => item.pack_id === pack.id)
-          .sort((a, b) => a.order - b.order)
-          .map(item => ({
-            label: item.label,
-            say: item.say || item.label,
-            icon: item.icon as keyof typeof Ionicons.glyphMap | undefined,
-            image_url: item.image_url,
-          })),
-      }))
-      .filter(cat => cat.tiles.length > 0); // Only include categories with tiles
-  }, [apiPacks, apiVocabItems, subject, isOnline]);
-
-  // Use API data if available, otherwise fallback to hardcoded PACKS
-  const categories: Category[] = apiCategories.length > 0 
-    ? apiCategories 
-    : (PACKS[subject] ?? PACKS.english);
+  const categories: Category[] = PACKS[subject] ?? PACKS.english;
 
   const [active, setActive] = useState(0);
   const [sentence, setSentence] = useState<string[]>([]);
@@ -293,7 +228,6 @@ export default function Board() {
         <View style={s.subjectPill}>
           <Ionicons name="school-outline" size={16} />
           <Text style={s.subjectText}>{subject.toUpperCase()}</Text>
-          {!isOnline && <Text style={s.offlineIndicator}> • OFFLINE</Text>}
         </View>
       </View>
 
@@ -385,9 +319,7 @@ export default function Board() {
           (symbolMode || numberMode) && s.tileIconSymbol,
         ]}
       >
-        {t.image_url ? (
-          <Image source={{ uri: t.image_url }} style={s.tileImage} />
-        ) : t.icon ? (
+        {t.icon ? (
           <Ionicons name={t.icon} size={18} />
         ) : (
           <Text
@@ -437,12 +369,6 @@ const s = StyleSheet.create({
     backgroundColor: "#fff",
   },
   subjectText: { fontWeight: "800", letterSpacing: 0.5 },
-  offlineIndicator: { 
-    fontWeight: "600", 
-    letterSpacing: 0.5, 
-    color: "#FF6B6B",
-    fontSize: 10,
-  },
 
   sentenceBox: {
     backgroundColor: "#fff",
@@ -510,12 +436,6 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   symbol: { fontSize: 18, fontWeight: "900" },
-  tileImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 10,
-    resizeMode: "cover",
-  },
 
   tileLabel: { fontSize: 16, fontWeight: "900" },
   tileHint: { fontSize: 12, color: "#666" },
