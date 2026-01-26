@@ -10,6 +10,7 @@ class Pack(Base):
     description: Mapped[str] = mapped_column(String(200), nullable=True)
     subject: Mapped[str] = mapped_column(String(60), nullable=True)
     grade: Mapped[str] = mapped_column(String(20), nullable=True)
+    color: Mapped[str] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

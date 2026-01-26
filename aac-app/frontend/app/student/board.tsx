@@ -1,9 +1,10 @@
 import { useLocalSearchParams } from "expo-router";
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from "react-native";
-import { useMemo, useState } from "react";
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform, Image } from "react-native";
+import { useMemo, useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { api } from "../../services/api";
 
-type Tile = { label: string; say: string; icon?: keyof typeof Ionicons.glyphMap };
+type Tile = { label: string; say: string; icon?: keyof typeof Ionicons.glyphMap | string };
 type Category = { name: string; color: string; tiles: Tile[] };
 
 /** Treat these as “symbol keypad tiles” (big, centered, no label/hint) */
@@ -185,12 +186,69 @@ const PACKS: Record<string, Category[]> = {
 export default function Board() {
   const params = useLocalSearchParams();
   const subject = (params.subject as string) || "english";
-  const categories: Category[] = PACKS[subject] ?? PACKS.english;
-
+  
+  const [categories, setCategories] = useState<Category[]>(PACKS[subject] ?? PACKS.english);
   const [active, setActive] = useState(0);
   const [sentence, setSentence] = useState<string[]>([]);
   const [numberBuffer, setNumberBuffer] = useState<string>("");
   const activeCat = categories[active];
+
+  // Fetch packs from database and merge with hardcoded ones
+  useEffect(() => {
+    async function loadPacks() {
+      try {
+        const packs = await api("/packs");
+        const vocabItems = await api("/vocab");
+
+        // Group vocab items by pack_id
+        const vocabByPack: Record<string, any[]> = {};
+        vocabItems.forEach((item: any) => {
+          if (!vocabByPack[item.pack_id]) {
+            vocabByPack[item.pack_id] = [];
+          }
+          vocabByPack[item.pack_id].push(item);
+        });
+
+        // Convert database packs to Category format
+        const dbCategories: Category[] = packs
+          .filter((pack: any) => {
+            // Filter packs by subject (match "General" subject to "help", others by name)
+            if (subject === "help") return pack.subject === "General";
+            return pack.subject?.toLowerCase() === subject.toLowerCase();
+          })
+          .map((pack: any) => {
+            const tiles: Tile[] = (vocabByPack[pack.id] || []).map((item: any) => ({
+              label: item.label,
+              say: item.say || item.label,
+              icon: item.icon || undefined,
+            }));
+
+            return {
+              name: pack.name,
+              color: pack.color || "#CFE8FF", // Default color if not set
+              tiles,
+            };
+          });
+
+        // Merge database categories with hardcoded ones
+        // Database categories come first, then hardcoded ones that don't have DB equivalents
+        const hardcodedCategories = PACKS[subject] ?? PACKS.english;
+        const dbCategoryNames = new Set(dbCategories.map((c) => c.name));
+        
+        const mergedCategories = [
+          ...dbCategories,
+          ...hardcodedCategories.filter((c) => !dbCategoryNames.has(c.name)),
+        ];
+
+        setCategories(mergedCategories);
+      } catch (error) {
+        console.error("Failed to load packs from database:", error);
+        // Keep using hardcoded packs as fallback
+      }
+    }
+
+    loadPacks();
+  }, [subject]);
 
   async function speakText(text: string) {
     if (!text) return;
@@ -275,13 +333,17 @@ export default function Board() {
         </View>
 
         <View style={s.tilesGrid}>
-{activeCat.tiles.map((t) => {
+{activeCat.tiles.map((t, idx) => {
   const symbolMode = !t.icon && isMathSymbol(t.label);
   const numberMode = isNumberTile(t.label);
+  
+  // Check if icon is a URL (starts with http/https) or an icon name
+  const isImageUrl = t.icon && (t.icon.startsWith('http://') || t.icon.startsWith('https://'));
+  const isIoniconName = t.icon && !isImageUrl;
 
   return (
     <Pressable
-      key={t.label}
+      key={`${t.label}-${idx}`}
       style={[
         s.tile,
         (symbolMode || numberMode) && s.tileSymbol,
@@ -319,8 +381,14 @@ export default function Board() {
           (symbolMode || numberMode) && s.tileIconSymbol,
         ]}
       >
-        {t.icon ? (
-          <Ionicons name={t.icon} size={18} />
+        {isImageUrl ? (
+          <Image 
+            source={{ uri: t.icon }} 
+            style={s.tileImage}
+            resizeMode="contain"
+          />
+        ) : isIoniconName ? (
+          <Ionicons name={t.icon as keyof typeof Ionicons.glyphMap} size={18} />
         ) : (
           <Text
             style={[
@@ -434,6 +502,11 @@ const s = StyleSheet.create({
     backgroundColor: "#F0F2F7",
     alignItems: "center",
     justifyContent: "center",
+  },
+  tileImage: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
   },
   symbol: { fontSize: 18, fontWeight: "900" },
 

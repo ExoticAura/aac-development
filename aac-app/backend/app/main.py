@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from app.routes import auth, vocab, packs
+from app.routes import auth, vocab, packs, admin
 from app.db import engine, SessionLocal
 from app.models_db import Base, Pack, VocabItem
 from uuid import uuid4
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(vocab.router, prefix="/vocab", tags=["vocab"])
 app.include_router(packs.router, prefix="/packs", tags=["packs"])
+app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
 
 @app.get("/")
@@ -37,7 +38,7 @@ def health():
 def seed_defaults():
     db = SessionLocal()
     try:
-        # Create default pack if missing
+        # Create default help pack if missing
         default_pack_id = "pack_default_help"
         pack = db.get(Pack, default_pack_id)
         if not pack:
@@ -47,6 +48,7 @@ def seed_defaults():
                 description="Core classroom help phrases",
                 subject="General",
                 grade="Any",
+                color="#B3E5FC",
             )
             db.add(pack)
 
@@ -69,6 +71,20 @@ def seed_defaults():
                     order=i,
                 )
                 db.add(item)
+        
+        # Create default Math pack if missing
+        math_pack_id = "pack_default_Math"
+        math_pack = db.get(Pack, math_pack_id)
+        if not math_pack:
+            math_pack = Pack(
+                id=math_pack_id,
+                name="Math",
+                description="Core Math",
+                subject="Math",
+                grade="Any",
+                color="#42A5F5",
+            )
+            db.add(math_pack)
         
         # Commit all changes in a single transaction
         db.commit()

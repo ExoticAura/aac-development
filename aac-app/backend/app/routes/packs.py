@@ -14,6 +14,7 @@ class PackOut(BaseModel):
     description: Optional[str] = None
     subject: Optional[str] = None
     grade: Optional[str] = None
+    color: Optional[str] = None
 
     class Config:
         from_attributes = True
