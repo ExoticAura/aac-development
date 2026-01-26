@@ -24,6 +24,7 @@ type Pack = {
   description?: string;
   subject?: string;
   grade?: string;
+  color?: string;
 };
 
 type VocabApiItem = {
@@ -32,6 +33,7 @@ type VocabApiItem = {
   label: string;
   say?: string | null;
   icon?: string | null;
+  color?: string | null;
   order?: number;
 };
 
@@ -322,9 +324,28 @@ async function createVocabItem(payload: {
   label: string;
   say?: string | null;
   icon?: string | null;
+  color?: string | null;
   order?: number;
 }): Promise<VocabApiItem> {
   const res = await fetch(`${API_URL}/vocab`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.json();
+}
+
+async function createPack(payload: {
+  name: string;
+  description?: string | null;
+  subject?: string | null;
+  grade?: string | null;
+  color?: string | null;
+}): Promise<Pack> {
+  const res = await fetch(`${API_URL}/packs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -340,6 +361,7 @@ async function updateVocabItem(itemId: string, payload: {
   label: string;
   say?: string | null;
   icon?: string | null;
+  color?: string | null;
   order?: number;
 }): Promise<VocabApiItem> {
   const res = await fetch(`${API_URL}/vocab/${encodeURIComponent(itemId)}`, {
@@ -369,7 +391,7 @@ function mapApiItemToTile(item: VocabApiItem): VocabTile {
     order: item.order ?? 0,
     label: item.label,
     say: item.say ?? item.label,
-    color: "#FFE6B3",
+    color: item.color ?? "#FFE6B3",
     icon: item.icon ?? undefined,
   };
 }
@@ -468,7 +490,7 @@ export default function Home() {
           key: pack.id,
           label: pack.name,
           icon: "albums",
-          color: "#CCE5FF",
+          color: pack.color ?? "#CCE5FF",
         }));
         setPackFolders(folderPacks);
 
@@ -1089,6 +1111,7 @@ export default function Home() {
                         label: updatedTile.label,
                         say: updatedTile.say,
                         icon: updatedTile.icon ?? null,
+                        color: updatedTile.color ?? null,
                         order: updatedTile.order ?? 0,
                       });
                     } catch (error) {
@@ -1333,6 +1356,7 @@ export default function Home() {
                         label: newWord.label,
                         say: newWord.say,
                         icon: newWord.icon ?? null,
+                        color: newWord.color ?? null,
                         order: 0,
                       });
                       const items = await fetchVocab(targetPackId);
@@ -1422,25 +1446,39 @@ export default function Home() {
                 </Pressable>
                 <Pressable 
                   style={[s.modalBtn, s.modalBtnPrimary]}
-                  onPress={() => {
+                  onPress={async () => {
                     if (!newCategoryName) {
                       alert('Please enter a category name');
                       return;
                     }
                     
-                    const newFolder = {
-                      key: newCategoryName.toLowerCase().replace(/\s+/g, '_'),
-                      label: newCategoryName,
-                      icon: newCategoryIcon,
-                      color: newCategoryColor,
-                    };
-                    
-                    setCustomFolders([...customFolders, newFolder]);
-                    setSelectedCategory(newFolder.key);
-                    setShowNewCategoryModal(false);
-                    setNewCategoryName("");
-                    setNewCategoryColor("#A3E6A3");
-                    setNewCategoryIcon("folder");
+                    try {
+                      // Create the pack in the database
+                      const newPack = await createPack({
+                        name: newCategoryName,
+                        description: `Custom category: ${newCategoryName}`,
+                        subject: null,
+                        grade: null,
+                        color: newCategoryColor,
+                      });
+                      
+                      // Add to pack folders
+                      const newFolder = {
+                        key: newPack.id,
+                        label: newPack.name,
+                        icon: newCategoryIcon,
+                        color: newPack.color ?? newCategoryColor,
+                      };
+                      
+                      setPackFolders([...packFolders, newFolder]);
+                      setSelectedCategory(newPack.id);
+                      setShowNewCategoryModal(false);
+                      setNewCategoryName("");
+                      setNewCategoryColor("#A3E6A3");
+                      setNewCategoryIcon("folder");
+                    } catch (error) {
+                      alert(`Failed to create category: ${error}`);
+                    }
                   }}
                 >
                   <Text style={[s.modalBtnText, s.modalBtnTextPrimary]}>Create Category</Text>

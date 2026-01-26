@@ -14,6 +14,7 @@ class VocabItemCreate(BaseModel):
     label: str = Field(..., min_length=1, max_length=80)
     say: Optional[str] = Field(default=None, max_length=200)
     icon: Optional[str] = Field(default=None, max_length=200)
+    color: Optional[str] = Field(default=None, max_length=20)
     order: int = 0
 
 class VocabItemOut(VocabItemCreate):
@@ -27,6 +28,7 @@ class VocabItemUpdate(BaseModel):
     label: str = Field(..., min_length=1, max_length=80)
     say: Optional[str] = Field(default=None, max_length=200)
     icon: Optional[str] = Field(default=None, max_length=200)
+    color: Optional[str] = Field(default=None, max_length=20)
     order: int = 0
 
 @router.get("", response_model=List[VocabItemOut])
@@ -75,6 +77,7 @@ def update_vocab(item_id: str, payload: VocabItemUpdate, db: Session = Depends(g
     item.label = payload.label
     item.say = payload.say
     item.icon = payload.icon
+    item.color = payload.color
     item.order = payload.order
     db.commit()
     db.refresh(item)
