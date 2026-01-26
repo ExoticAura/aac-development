@@ -10,7 +10,6 @@ class Pack(Base):
     description: Mapped[str] = mapped_column(String(200), nullable=True)
     subject: Mapped[str] = mapped_column(String(60), nullable=True)
     grade: Mapped[str] = mapped_column(String(20), nullable=True)
-    color: Mapped[str] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -26,7 +25,6 @@ class VocabItem(Base):
     label: Mapped[str] = mapped_column(String(80), nullable=False)
     say: Mapped[str] = mapped_column(Text, nullable=True)
     icon: Mapped[str] = mapped_column(String(200), nullable=True)
-    color: Mapped[str] = mapped_column(String(20), nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
